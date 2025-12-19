@@ -92,8 +92,6 @@ def bench_add():
         ]
 
     print(df)
-    # df.to_csv("add_bench.csv", mode="a", header=False)
-    # print(f"Shape: {shape}, CUTE Timing: {cute_timing:.3f} ms, CUTE Vectorized Timing: {cute_vectorized_timing:.3f} ms, Torch Timing: {torch_timing:.3f} ms, CUTE Bandwidth: {cute_bandwidth:.2f} GiB/s, CUTE Vectorized Bandwidth: {cute_vectorized_bandwidth:.2f} GiB/s, Torch Bandwidth: {torch_bandwidth:.2f} TB/s")
 
 
 if __name__ == "__main__":

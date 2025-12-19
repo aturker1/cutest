@@ -2,9 +2,12 @@ import cutlass.cute as cute
 import torch
 from cutlass.cute.runtime import from_dlpack
 import cutlass
+from triton.testing import do_bench
 
 
 torch.set_printoptions(precision=4, sci_mode=False)
+# torch enable fastmath
+torch.backends.cuda.matmul.allow_tf32 = True
 
 
 @cute.kernel
@@ -13,10 +16,6 @@ def rms_norm(
 ):
     t_idx, _, _ = cute.arch.thread_idx()
     b_idx, _, _ = cute.arch.block_idx()
-
-    allocator = cutlass.utils.SmemAllocator()
-    scalar_layout = cute.make_layout((1))
-    squared_reduce = allocator.allocate_tensor(cutlass.Float32, layout=scalar_layout)
 
     block_coord = ((None, None), b_idx)
 
@@ -41,13 +40,15 @@ def rms_norm(
     for i in range(regA.shape[0]):
         mean_sq += regA[i] * regA[i]
 
-    mean_sq = cute.arch.warp_reduction(mean_sq, op=lambda x, y: x + y)
-    if t_idx == 0:
-        squared_reduce[0] = cute.math.rsqrt(mean_sq / 256.0 + epsilon, fastmath=True)
+    mean_sq = cute.arch.warp_reduction(
+        mean_sq, op=lambda x, y: x + y, threads_in_group=16
+    )
 
-    cute.arch.sync_threads()
+    reduced_sqrt = cute.math.rsqrt(mean_sq / 128.0 + epsilon, fastmath=True)
 
-    thrY[None] = (regA * squared_reduce[0]).to(gY.element_type) * scale_val
+    thrY[None] = (regA * reduced_sqrt * scale_val.to(cutlass.Float32)).to(
+        gY.element_type
+    )
 
 
 @cute.jit
@@ -57,10 +58,7 @@ def rms_norm_kernel(
     scale: cute.Tensor,
     epsilon: cutlass.Constexpr,
 ):
-    # vec_byte = 16
-    # vec_len = (vec_byte * 8) // x.element_type.width
-
-    t_layout = cute.make_ordered_layout((1, 32), order=(1, 0))  # 32 threads
+    t_layout = cute.make_ordered_layout((2, 16), order=(1, 0))  # 32 threads
     v_layout = cute.make_ordered_layout((1, 8), order=(1, 0))  # 8 elements each
 
     tiler_mn, tv_layout = cute.make_layout_tv(t_layout, v_layout)
@@ -78,41 +76,39 @@ def rms_norm_kernel(
 
 
 if __name__ == "__main__":
-    x = torch.randn((1024, 256), dtype=torch.bfloat16, device="cuda")
-    y = torch.zeros((1024, 256), dtype=torch.bfloat16, device="cuda")
-    scale = torch.randn((256,), dtype=torch.bfloat16, device="cuda")
+    shapes = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144]
+    benchmark_results = []
 
-    x_cute = from_dlpack(x, assumed_align=16)
-    y_cute = from_dlpack(y, assumed_align=16)
-    scale_cute = from_dlpack(scale.view((1, scale.shape[0])), assumed_align=16)
-    epsilon = 1e-6
+    for shape in shapes:
+        x = torch.randn((shape, 128), dtype=torch.bfloat16, device="cuda")
+        y = torch.zeros((shape, 128), dtype=torch.bfloat16, device="cuda")
+        scale = torch.randn((128,), dtype=torch.bfloat16, device="cuda")
 
-    kernel = cute.compile(rms_norm_kernel, x_cute, y_cute, scale_cute, epsilon)
+        scale_cu = torch.ones((2, 128), dtype=torch.bfloat16, device="cuda") * scale
 
-    ref_res = torch.nn.functional.rms_norm(x, (256,), weight=scale, eps=epsilon)
-    kernel_res = kernel(x_cute, y_cute, scale_cute)
+        x_cute = from_dlpack(x, assumed_align=16)
+        y_cute = from_dlpack(y, assumed_align=16)
+        scale_cute = from_dlpack(scale_cu, assumed_align=16)
+        epsilon = 1e-6
 
-    # Benchmark the kernel
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record()
-    for _ in range(100):
+        kernel = cute.compile(rms_norm_kernel, x_cute, y_cute, scale_cute, epsilon)
+
+        ref_res = torch.nn.functional.rms_norm(x, (128,), weight=scale, eps=epsilon)
         kernel_res = kernel(x_cute, y_cute, scale_cute)
-    end_event.record()
-    torch.cuda.synchronize()
 
-    print(f"Kernel execution time: {start_event.elapsed_time(end_event)} ms")
+        cute_time = do_bench(lambda: kernel(x_cute, y_cute, scale_cute))
 
-    # Benchmark the reference
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-    start_event.record()
-    for _ in range(100):
-        ref_res = torch.nn.functional.rms_norm(x, (256,), weight=scale, eps=epsilon)
-    end_event.record()
-    torch.cuda.synchronize()
-    print(f"Reference execution time: {start_event.elapsed_time(end_event)} ms")
+        ref_time = do_bench(
+            lambda: torch.nn.functional.rms_norm(x, (128,), weight=scale, eps=epsilon)
+        )
 
-    # MAE
-
-    print(f"MAE: {torch.mean(torch.abs(ref_res - y))}")
+        benchmark_results.append(
+            {
+                "shape": shape,
+                "cute_time": cute_time,
+                "ref_time": ref_time,
+                "speedup": ref_time / cute_time,
+                "mae": torch.mean(torch.abs(ref_res - y)),
+            }
+        )
+        print(benchmark_results[-1])
