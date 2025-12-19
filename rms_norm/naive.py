@@ -1,8 +1,6 @@
 import cutlass.cute as cute
 import torch
-from cutlass.cute.runtime import from_dlpack
 import cutlass
-from triton.testing import do_bench
 
 
 torch.set_printoptions(precision=4, sci_mode=False)
@@ -58,8 +56,8 @@ def rms_norm_kernel(
     scale: cute.Tensor,
     epsilon: cutlass.Constexpr,
 ):
-    t_layout = cute.make_ordered_layout((2, 16), order=(1, 0))  # 32 threads
-    v_layout = cute.make_ordered_layout((1, 8), order=(1, 0))  # 8 elements each
+    t_layout = cute.make_ordered_layout((16, 16), order=(1, 0))
+    v_layout = cute.make_ordered_layout((1, 8), order=(1, 0))
 
     tiler_mn, tv_layout = cute.make_layout_tv(t_layout, v_layout)
 
@@ -73,42 +71,3 @@ def rms_norm_kernel(
     )
 
     return y
-
-
-if __name__ == "__main__":
-    shapes = [1024, 2048, 4096, 8192, 16384, 32768, 65536, 131072, 262144]
-    benchmark_results = []
-
-    for shape in shapes:
-        x = torch.randn((shape, 128), dtype=torch.bfloat16, device="cuda")
-        y = torch.zeros((shape, 128), dtype=torch.bfloat16, device="cuda")
-        scale = torch.randn((128,), dtype=torch.bfloat16, device="cuda")
-
-        scale_cu = torch.ones((2, 128), dtype=torch.bfloat16, device="cuda") * scale
-
-        x_cute = from_dlpack(x, assumed_align=16)
-        y_cute = from_dlpack(y, assumed_align=16)
-        scale_cute = from_dlpack(scale_cu, assumed_align=16)
-        epsilon = 1e-6
-
-        kernel = cute.compile(rms_norm_kernel, x_cute, y_cute, scale_cute, epsilon)
-
-        ref_res = torch.nn.functional.rms_norm(x, (128,), weight=scale, eps=epsilon)
-        kernel_res = kernel(x_cute, y_cute, scale_cute)
-
-        cute_time = do_bench(lambda: kernel(x_cute, y_cute, scale_cute))
-
-        ref_time = do_bench(
-            lambda: torch.nn.functional.rms_norm(x, (128,), weight=scale, eps=epsilon)
-        )
-
-        benchmark_results.append(
-            {
-                "shape": shape,
-                "cute_time": cute_time,
-                "ref_time": ref_time,
-                "speedup": ref_time / cute_time,
-                "mae": torch.mean(torch.abs(ref_res - y)),
-            }
-        )
-        print(benchmark_results[-1])
