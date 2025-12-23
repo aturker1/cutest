@@ -27,7 +27,7 @@ if __name__ == "__main__":
         ffi_ms = bench_ms(lambda: vectorized_add_fwd_tvm_ffi(bench_a, bench_b))
         base_ms = bench_ms(lambda: vectorized_add_wrapper(bench_a, bench_b))
         torch_ms = bench_ms(lambda: bench_a + bench_b)
-        bw = lambda ms: shape * shape * a.element_size() * 3 / ms / 1e9
+        bw = lambda ms: shape * shape * a.element_size() * 3 / ms / 1e9  # noqa: E731
 
         print(
             f"{shape}x{shape}: "
