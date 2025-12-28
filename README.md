@@ -1,3 +1,3 @@
 # cutest
 
-cutest kernels for cutedsl
+cutest kernels with cutedsl
