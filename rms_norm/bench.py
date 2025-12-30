@@ -24,16 +24,14 @@ def bench(M, N=128, dtype=torch.bfloat16):
         )
 
         # Compile torch kernel
-        compiled_torch = torch.compile(
-            torch.nn.functional.rms_norm, dynamic=True, mode="reduce-overhead"
-        )
+        compiled_torch = torch.compile(torch.nn.functional.rms_norm)
         compiled_torch(x, (N,), weight=w, eps=eps)
         compiled_torch_time = do_bench(
             lambda: compiled_torch(x, (N,), weight=w, eps=eps)
         )
 
     # Quack kernel
-    quack_out,*_ = rmsnorm_fwd(x, w, eps=eps)
+    quack_out, *_ = rmsnorm_fwd(x, w, eps=eps)
     quack_time = do_bench(lambda: rmsnorm_fwd(x, w, eps=eps))
     torch.testing.assert_close(quack_out, ref)
 
@@ -58,7 +56,7 @@ def bench(M, N=128, dtype=torch.bfloat16):
     cute_tvm_time = do_bench(lambda: rms_norm_fwd_tvm_ffi(x, w, eps))
     torch.testing.assert_close(y_tvm, ref)
 
-    bwd = lambda m, n, time: M * N * dtype.itemsize * 2 / time / 1e6
+    bwd = lambda m, n, time: M * N * dtype.itemsize * 2 / time / 1e6  # noqa
 
     print(
         f"M={M:7d} | "
