@@ -63,6 +63,13 @@ def _normalize_values(values: GraphValue | Iterable[GraphValue]) -> list[GraphVa
 def _build_graph(graph: Digraph, roots: list[GraphValue]) -> None:
     seen_values: set[int] = set()
     seen_ops: set[int] = set()
+    seen_edges: set[tuple[str, str]] = set()
+
+    def add_edge(src: str, dst: str) -> None:
+        edge = (src, dst)
+        if edge not in seen_edges:
+            seen_edges.add(edge)
+            graph.edge(src, dst)
 
     def visit_value(value: GraphValue) -> str:
         node_id = f"value_{id(value)}"
@@ -75,7 +82,9 @@ def _build_graph(graph: Digraph, roots: list[GraphValue]) -> None:
 
         if value.op is not None:
             op_id = visit_op(value.op)
-            graph.edge(op_id, node_id)
+            for input_value in _value_inputs(value):
+                add_edge(visit_value(input_value), op_id)
+            add_edge(op_id, node_id)
 
         return node_id
 
@@ -85,9 +94,11 @@ def _build_graph(graph: Digraph, roots: list[GraphValue]) -> None:
             return node_id
 
         seen_ops.add(id(op))
-        graph.node(node_id, f"Op\n{getattr(op, 'name', op.__class__.__name__)}", **_node_style("op"))
-        for input_value in _op_inputs(op):
-            graph.edge(visit_value(input_value), node_id)
+        graph.node(
+            node_id,
+            f"Op\n{getattr(op, 'name', op.__class__.__name__)}",
+            **_node_style("op"),
+        )
         return node_id
 
     for root in roots:
@@ -104,6 +115,24 @@ def _op_inputs(op: object) -> list[GraphValue]:
             if id(nested) not in seen:
                 seen.add(id(nested))
                 inputs.append(nested)
+    return inputs
+
+
+def _tensor_inputs(tensor: Tensor) -> list[GraphValue]:
+    return list(_iter_values(tensor.value))
+
+
+def _value_inputs(value: GraphValue) -> list[GraphValue]:
+    if isinstance(value, Item) or value.op is None:
+        return []
+
+    inputs: list[GraphValue] = []
+    seen: set[int] = set()
+    for source in (_tensor_inputs(value), _op_inputs(value.op)):
+        for input_value in source:
+            if id(input_value) not in seen:
+                seen.add(id(input_value))
+                inputs.append(input_value)
     return inputs
 
 
@@ -124,6 +153,8 @@ def _value_label(value: GraphValue) -> str:
         if isinstance(tensor, torch.Tensor):
             shape = "scalar" if tensor.ndim == 0 else "x".join(map(str, tensor.shape))
             return f"Tensor\nshape={shape}\ndtype={tensor.dtype}"
+        if _tensor_inputs(value):
+            return "Tensor"
         return f"Tensor\n{type(tensor).__name__}"
     return f"Item\nvalue={value.value}"
 
