@@ -3,13 +3,28 @@ from cutest.ops.op import Op
 
 
 class ElementWise(Op):
-    def __init__(self, name: str):
-        super().__init__(name)
+    def __init__(self, op: str):
+        super().__init__(op)
+
+    def forward(self, a: Tensor | Item, b: Tensor | Item):
+        return Tensor([a, b], self.op)
 
 
 class Add(ElementWise):
     def __init__(self):
-        super().__init__("add")
+        super().__init__("+")
 
-    def forward(self, a: Tensor | Item, b: Tensor | Item):
-        return Tensor([a, b], self)
+
+class Sub(ElementWise):
+    def __init__(self):
+        super().__init__("-")
+
+
+class Mul(ElementWise):
+    def __init__(self):
+        super().__init__("*")
+
+
+class Div(ElementWise):
+    def __init__(self):
+        super().__init__("/")

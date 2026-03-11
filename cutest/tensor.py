@@ -25,5 +25,19 @@ class Tensor:
     def __add__(self, other: Self | Item) -> Self:
         from cutest.ops.elem_wise import Add
 
-        op = Add()
-        return Tensor([self, other], op)
+        return Tensor([self, other], Add())
+
+    def __sub__(self, other: Self | Item) -> Self:
+        from cutest.ops.elem_wise import Sub
+
+        return Tensor([self, other], Sub())
+
+    def __mul__(self, other: Self | Item) -> Self:
+        from cutest.ops.elem_wise import Mul
+
+        return Tensor([self, other], Mul())
+
+    def __truediv__(self, other: Self | Item) -> Self:
+        from cutest.ops.elem_wise import Div
+
+        return Tensor([self, other], Div())
