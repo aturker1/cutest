@@ -2,16 +2,21 @@ from __future__ import annotations
 
 from cutest.compiler.trace import FusedIR
 
+# Tunable parameters (matching reference CuTe add kernel)
+TILE_SHAPE = (4, 8)
+THREADS_PER_BLOCK = 256
+
 
 def codegen(ir: FusedIR) -> str:
     """Generate a fused CuTe DSL kernel from elementwise IR."""
+    tm, tn = TILE_SHAPE
     input_params = [f"g{name}: cute.Tensor" for name in ir.inputs]
     all_params = input_params + ["gOut: cute.Tensor"]
 
     # --- @cute.kernel (per-thread body) ---
     kernel_lines = []
     kernel_lines.append("@cute.kernel")
-    kernel_lines.append(f"def _fused_elementwise(")
+    kernel_lines.append("def _fused_elementwise(")
     for p in all_params:
         kernel_lines.append(f"    {p},")
     kernel_lines.append("):")
@@ -29,9 +34,7 @@ def codegen(ir: FusedIR) -> str:
 
     # Load inputs
     for name in ir.inputs:
-        kernel_lines.append(
-            f"    {name} = g{name}[(None, (mi, ni))].load()"
-        )
+        kernel_lines.append(f"    {name} = g{name}[(None, (mi, ni))].load()")
     kernel_lines.append("")
 
     # Compute ops (skip input-only nodes)
@@ -57,13 +60,13 @@ def codegen(ir: FusedIR) -> str:
     for p in jit_all_params:
         jit_lines.append(f"    {p},")
     jit_lines.append("):")
-    jit_lines.append("    n_threads_per_block = 256")
+    jit_lines.append(f"    n_threads_per_block = {THREADS_PER_BLOCK}")
     jit_lines.append("")
 
     # Zipped divide for all tensors
     for name in ir.inputs:
-        jit_lines.append(f"    g{name} = cute.zipped_divide({name}, (4, 8))")
-    jit_lines.append("    gOut = cute.zipped_divide(Out, (4, 8))")
+        jit_lines.append(f"    g{name} = cute.zipped_divide({name}, ({tm}, {tn}))")
+    jit_lines.append(f"    gOut = cute.zipped_divide(Out, ({tm}, {tn}))")
     jit_lines.append("")
 
     jit_lines.append(f"    m = g{ir.inputs[0]}.shape[1][0]")

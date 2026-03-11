@@ -2,23 +2,8 @@
 
 Something cute
 
-Basic example:
+Elementwise kernel fuser built on NVIDIA CuTe DSL. Traces a computation graph and generates a single fused CUDA kernel.
 
-```python
-import torch
-from pathlib import Path
+![Benchmark](assets/bench_fuse.png)
 
-from cutest import RMSNorm, Tensor, visualize_graph
-
-x = Tensor(torch.randn(2, 4))
-weight = Tensor(torch.randn(4))
-bias = Tensor(torch.randn(2, 4))
-bias2 = Tensor(torch.randn(2, 4))
-
-norm = RMSNorm(weight, bias)(x)
-output = norm + bias2
-```
-
-Example graph:
-
-![Computation graph](assets/graph.svg)
+`(A + B) * C - D` fused into one kernel, bfloat16, benchmarked against `torch.compile` and PyTorch eager on H100.

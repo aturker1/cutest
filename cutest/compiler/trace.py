@@ -16,10 +16,12 @@ class IRNode:
 
 @dataclass
 class FusedIR:
-    inputs: list[str]       # ordered input names: ["in0", "in1", ...]
-    nodes: list[IRNode]     # topologically sorted (inputs first, then ops)
-    output: str             # name of the final output node
-    input_tensors: dict[str, torch.Tensor] = field(default_factory=dict)  # name -> actual tensor
+    inputs: list[str]  # ordered input names: ["in0", "in1", ...]
+    nodes: list[IRNode]  # topologically sorted (inputs first, then ops)
+    output: str  # name of the final output node
+    input_tensors: dict[str, torch.Tensor] = field(
+        default_factory=dict
+    )  # name -> actual tensor
 
 
 def trace(tensor) -> FusedIR:

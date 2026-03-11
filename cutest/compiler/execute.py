@@ -94,6 +94,20 @@ def _compile_ir(ir: FusedIR) -> object:
     return fn
 
 
+def compile(tensor):
+    """Trace and compile once. Returns a callable: f(*input_tensors) -> output_tensor."""
+    ir = trace(tensor)
+    fn = _compile_ir(ir)
+    n_inputs = len(ir.inputs)
+
+    def _run(*inputs: torch.Tensor) -> torch.Tensor:
+        out = torch.empty_like(inputs[0])
+        fn(*inputs, out)
+        return out
+
+    return _run
+
+
 def execute(tensor) -> torch.Tensor:
     """Trace, compile, and run a fused elementwise kernel. Returns output tensor."""
     ir = trace(tensor)

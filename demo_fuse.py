@@ -1,4 +1,5 @@
 """Demo: Phase 1 kernel fusion - trace, codegen, compile, and execute."""
+
 import torch
 from cutest import Tensor, fuse, execute
 
