@@ -16,7 +16,7 @@ torch_compiled = torch.compile(torch_eager)
 
 def bench_fuse():
     shapes = [256, 512, 1024, 2048, 4096, 8192]
-    dtype = torch.bfloat16
+    dtype = torch.float16
 
     # Header
     print(
@@ -40,7 +40,7 @@ def bench_fuse():
         # Verify correctness
         expected = torch_eager(a, b, c, d)
         result = fused_fn(a, b, c, d)
-        # torch.testing.assert_close(result, expected, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(result, expected, atol=1e-2, rtol=1e-2)
 
         # Warmup torch.compile
         for _ in range(5):

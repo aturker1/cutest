@@ -6,4 +6,4 @@ Elementwise kernel fuser built on NVIDIA CuTe DSL. Traces a computation graph an
 
 ![Benchmark](assets/bench_fuse.png)
 
-`(A + B) * C - D` fused into one kernel, bfloat16, benchmarked against `torch.compile` and PyTorch eager on H100.
+`(A + B) * C - D` fused into one kernel, float16, benchmarked against `torch.compile` and PyTorch eager on H100.

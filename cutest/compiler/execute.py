@@ -101,6 +101,7 @@ def compile(tensor):
     n_inputs = len(ir.inputs)
 
     def _run(*inputs: torch.Tensor) -> torch.Tensor:
+        assert len(inputs) == n_inputs, f"Expected {n_inputs} inputs, got {len(inputs)}"
         out = torch.empty_like(inputs[0])
         fn(*inputs, out)
         return out
