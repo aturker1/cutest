@@ -1,0 +1,25 @@
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+load("@rules_cc//cc:objc_library.bzl", "objc_library")
+
+objc_library(
+    name = "tensor",
+    hdrs = ["cutest/metal/backend/tensor.h"],
+    sdk_frameworks = ["Metal"],
+    target_compatible_with = ["@platforms//os:macos"],
+    visibility = ["//visibility:public"],
+)
+
+objc_library(
+    name = "tensor_test_main",
+    srcs = ["tests/tensor_test.mm"],
+    copts = ["-std=c++17", "-UNDEBUG"],
+    deps = [":tensor"],
+    testonly = True,
+)
+
+cc_test(
+    name = "tensor_test",
+    size = "small",
+    tags = ["local"],  # Requires access to the host's Metal device.
+    deps = [":tensor_test_main"],
+)
